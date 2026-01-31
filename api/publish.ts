@@ -91,13 +91,35 @@ function markdownToNotionBlocks(markdown: string): any[] {
   return blocks;
 }
 
-// NotionページIDを正規化（ハイフンなし32文字に変換）
-function normalizePageId(pageId: string): string {
+// URLまたはページIDからNotionページIDを抽出
+function extractPageId(input: string): string {
+  let pageId = input.trim();
+
+  // URLの場合、p=パラメータからページIDを抽出
+  if (pageId.includes('notion.so') || pageId.includes('notion.site')) {
+    const url = new URL(pageId.startsWith('http') ? pageId : `https://${pageId}`);
+    const pParam = url.searchParams.get('p');
+    if (pParam) {
+      pageId = pParam;
+    } else {
+      // パスの最後の部分からIDを抽出（例: /Page-Title-abc123def456...）
+      const pathParts = url.pathname.split('/').filter(Boolean);
+      if (pathParts.length > 0) {
+        const lastPart = pathParts[pathParts.length - 1];
+        const match = lastPart.match(/([a-f0-9]{32})$/i);
+        if (match) {
+          pageId = match[1];
+        }
+      }
+    }
+  }
+
   // ハイフンを除去して小文字に
   const cleaned = pageId.replace(/-/g, '').toLowerCase();
+
   // 32文字でなければエラー
   if (cleaned.length !== 32 || !/^[a-f0-9]+$/.test(cleaned)) {
-    throw new Error(`無効なNotionページID: ${pageId}`);
+    throw new Error(`無効なNotionページID/URL: ${input}`);
   }
   return cleaned;
 }
@@ -116,9 +138,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // ページIDを正規化
-    const notionPageId = normalizePageId(rawPageId);
-    console.log('Normalized page ID:', notionPageId);
+    // ページIDを抽出
+    const notionPageId = extractPageId(rawPageId);
+    console.log('Extracted page ID:', notionPageId);
 
     // 環境変数チェック
     if (!process.env.NOTION_API_KEY) {
