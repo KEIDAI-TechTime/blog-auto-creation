@@ -382,8 +382,8 @@
           <input type="text" id="notionUrl" placeholder="https://notion.so/...">
         </div>
         <div class="form-group">
-          <label for="draftFile">下書きファイルパス</label>
-          <input type="text" id="draftFile" placeholder="./drafts/2024-01-01-article.md">
+          <label for="articleTextarea">記事本文（下書き生成後に自動入力されます）</label>
+          <textarea id="articleTextarea" rows="10" style="width:100%;padding:14px 18px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;background:rgba(0,0,0,0.3);color:#fff;font-size:0.9rem;resize:vertical;" placeholder="記事本文をここに入力..."></textarea>
         </div>
         <button class="btn btn-primary" id="btnPublish">公開する</button>
       </div>
@@ -492,7 +492,7 @@
 
         // 公開タブに自動入力
         document.getElementById('publishTitle').value = title;
-        document.getElementById('draftFile').value = data.outputPath || '';
+        document.getElementById('articleTextarea').value = data.articleContent || '';
 
         result.classList.add('show');
       } catch (e) {
@@ -507,9 +507,9 @@
     document.getElementById('btnPublish').addEventListener('click', async () => {
       const title = document.getElementById('publishTitle').value.trim();
       const notionUrl = document.getElementById('notionUrl').value.trim();
-      const draftFile = document.getElementById('draftFile').value.trim();
+      const articleContent = document.getElementById('articleTextarea').value.trim();
 
-      if (!title || !notionUrl || !draftFile) {
+      if (!title || !notionUrl || !articleContent) {
         alert('全ての項目を入力してください');
         return;
       }
@@ -526,7 +526,7 @@
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, notionUrl, draftFile })
+          body: JSON.stringify({ title, notionUrl, articleContent })
         });
 
         const data = await res.json();
