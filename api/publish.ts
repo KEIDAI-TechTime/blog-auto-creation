@@ -91,19 +91,34 @@ function markdownToNotionBlocks(markdown: string): any[] {
   return blocks;
 }
 
+// NotionページIDを正規化（ハイフンなし32文字に変換）
+function normalizePageId(pageId: string): string {
+  // ハイフンを除去して小文字に
+  const cleaned = pageId.replace(/-/g, '').toLowerCase();
+  // 32文字でなければエラー
+  if (cleaned.length !== 32 || !/^[a-f0-9]+$/.test(cleaned)) {
+    throw new Error(`無効なNotionページID: ${pageId}`);
+  }
+  return cleaned;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { notionPageId, title, articleContent, metadata, thumbnailUrl } = req.body;
+    const { notionPageId: rawPageId, title, articleContent, metadata, thumbnailUrl } = req.body;
 
-    if (!notionPageId || !articleContent || !metadata) {
+    if (!rawPageId || !articleContent || !metadata) {
       return res.status(400).json({
         error: 'notionPageId, articleContent, metadata は必須です'
       });
     }
+
+    // ページIDを正規化
+    const notionPageId = normalizePageId(rawPageId);
+    console.log('Normalized page ID:', notionPageId);
 
     // 環境変数チェック
     if (!process.env.NOTION_API_KEY) {
