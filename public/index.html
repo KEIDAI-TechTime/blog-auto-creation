@@ -94,7 +94,7 @@
       font-size: 0.9rem;
     }
 
-    input[type="text"] {
+    input[type="text"], textarea {
       width: 100%;
       padding: 14px 18px;
       border: 1px solid rgba(255,255,255,0.2);
@@ -105,13 +105,19 @@
       transition: border-color 0.3s;
     }
 
-    input[type="text"]:focus {
+    input[type="text"]:focus, textarea:focus {
       outline: none;
       border-color: #00d4aa;
     }
 
-    input[type="text"]::placeholder {
+    input[type="text"]::placeholder, textarea::placeholder {
       color: #666;
+    }
+
+    textarea {
+      resize: vertical;
+      font-size: 0.9rem;
+      line-height: 1.6;
     }
 
     .btn {
@@ -210,36 +216,6 @@
       color: #888;
     }
 
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .tab {
-      padding: 12px 24px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      color: #888;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-
-    .tab.active {
-      background: rgba(0,212,170,0.2);
-      border-color: #00d4aa;
-      color: #00d4aa;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
     .x-post-box {
       background: #000;
       border: 1px solid #333;
@@ -304,13 +280,55 @@
     a {
       color: #00d4aa;
     }
+
+    .help-text {
+      color: #666;
+      font-size: 0.8rem;
+      margin-top: 5px;
+    }
+
+    .metadata-preview {
+      margin-top: 15px;
+      padding: 15px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+    }
+
+    .metadata-item {
+      display: flex;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+
+    .metadata-label {
+      color: #888;
+      width: 120px;
+      flex-shrink: 0;
+    }
+
+    .metadata-value {
+      color: #00d4aa;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .tag {
+      background: rgba(0,212,170,0.2);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>TechTime Blog Automation</h1>
-      <p class="subtitle">AI-Powered Blog Creation Tool</p>
+      <p class="subtitle">AI-Powered Blog Publishing Tool</p>
     </header>
 
     <div class="status-bar" id="statusBar">
@@ -332,116 +350,89 @@
       </div>
     </div>
 
-    <div class="tabs">
-      <div class="tab active" data-tab="draft">1. 下書き生成</div>
-      <div class="tab" data-tab="publish">2. 公開</div>
+    <div class="card">
+      <h2>記事をNotionに公開</h2>
+      <p style="color:#888;margin-bottom:20px;font-size:0.9rem;">
+        作成済みのMarkdown記事をNotionに保存し、サムネイル生成・X投稿文生成を自動化します。
+      </p>
+
+      <div class="form-group">
+        <label for="notionPageId">NotionページID</label>
+        <input type="text" id="notionPageId" placeholder="例: 12345678abcd1234abcd1234abcd1234">
+        <p class="help-text">NotionページURLの末尾32文字（ハイフンなし）を入力してください</p>
+      </div>
+
+      <div class="form-group">
+        <label for="publishTitle">記事タイトル（省略可）</label>
+        <input type="text" id="publishTitle" placeholder="Markdownの見出しから自動抽出されます">
+        <p class="help-text">空欄の場合、Markdown内の最初の # 見出しをタイトルとして使用します</p>
+      </div>
+
+      <div class="form-group">
+        <label for="articleTextarea">記事本文（Markdown）</label>
+        <textarea id="articleTextarea" rows="15" placeholder="# 記事タイトル
+
+## 導入
+ここに導入文を書きます...
+
+## 本文
+ここに本文を書きます...
+
+## まとめ
+ここにまとめを書きます..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" id="btnPublish">公開処理を実行</button>
     </div>
 
-    <!-- 下書き生成タブ -->
-    <div class="tab-content active" id="tab-draft">
-      <div class="card">
-        <h2>記事の下書きを生成</h2>
-        <div class="form-group">
-          <label for="draftTitle">記事タイトル</label>
-          <input type="text" id="draftTitle" placeholder="例: SES業界の闇と解決策">
-        </div>
-        <button class="btn btn-primary" id="btnDraft">下書きを生成</button>
-      </div>
-
-      <div class="loading" id="loadingDraft">
-        <div class="spinner"></div>
-        <p class="loading-text">記事を生成中です...<br>Webリサーチと執筆には数分かかります</p>
-      </div>
-
-      <div class="result-area" id="resultDraft">
-        <div class="card">
-          <h2>生成結果</h2>
-          <div class="result-box">
-            <h3>記事本文</h3>
-            <div class="result-content" id="articleContent"></div>
-          </div>
-          <div class="result-box">
-            <h3>保存先</h3>
-            <div class="result-content" id="outputPath"></div>
-          </div>
-          <button class="btn btn-secondary copy-btn" onclick="copyArticle()">記事をコピー</button>
-        </div>
-      </div>
+    <div class="loading" id="loadingPublish">
+      <div class="spinner"></div>
+      <p class="loading-text">公開処理中です...<br>メタデータ生成・サムネイル作成・Notion保存を実行中</p>
     </div>
 
-    <!-- 公開タブ -->
-    <div class="tab-content" id="tab-publish">
+    <div class="result-area" id="resultPublish">
       <div class="card">
-        <h2>Notionに公開</h2>
-        <div class="form-group">
-          <label for="publishTitle">記事タイトル</label>
-          <input type="text" id="publishTitle" placeholder="例: SES業界の闇と解決策">
+        <h2>公開完了</h2>
+
+        <div class="success-message show">
+          Notionへの保存が完了しました。カバー画像も設定されています。
         </div>
-        <div class="form-group">
-          <label for="notionUrl">NotionページURL</label>
-          <input type="text" id="notionUrl" placeholder="https://notion.so/...">
+
+        <div class="result-box">
+          <h3>NotionページID</h3>
+          <div class="result-content" id="resultPageId"></div>
         </div>
-        <div class="form-group">
-          <label for="articleTextarea">記事本文（下書き生成後に自動入力されます）</label>
-          <textarea id="articleTextarea" rows="10" style="width:100%;padding:14px 18px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;background:rgba(0,0,0,0.3);color:#fff;font-size:0.9rem;resize:vertical;" placeholder="記事本文をここに入力..."></textarea>
+
+        <div class="result-box">
+          <h3>生成されたメタデータ</h3>
+          <div class="metadata-preview" id="metadataPreview"></div>
         </div>
-        <button class="btn btn-primary" id="btnPublish">公開する</button>
-      </div>
 
-      <div class="loading" id="loadingPublish">
-        <div class="spinner"></div>
-        <p class="loading-text">公開処理中です...<br>サムネイル生成・Notion保存を実行中</p>
-      </div>
+        <div class="result-box">
+          <h3>サムネイル（カバー画像）</h3>
+          <img id="thumbnailPreview" class="thumbnail-preview" src="" alt="サムネイル">
+          <p class="help-text" style="margin-top:10px;">この画像はNotionページのカバー画像として設定されました</p>
+        </div>
 
-      <div class="result-area" id="resultPublish">
-        <div class="card">
-          <h2>公開完了</h2>
-
-          <div class="success-message show">
-            Notionへの保存が完了しました
-          </div>
-
-          <div class="result-box">
-            <h3>Notion URL</h3>
-            <div class="result-content"><a id="resultNotionUrl" href="#" target="_blank"></a></div>
-          </div>
-
-          <div class="result-box">
-            <h3>サムネイル</h3>
-            <img id="thumbnailPreview" class="thumbnail-preview" src="" alt="サムネイル">
-          </div>
-
-          <div class="result-box">
-            <h3>X投稿文</h3>
-            <div class="x-post-box">
-              <div class="x-post-header">
-                <div class="x-avatar">T</div>
-                <div>
-                  <div class="x-name">TechTime</div>
-                  <div class="x-handle">@techtime_jp</div>
-                </div>
+        <div class="result-box">
+          <h3>X投稿文</h3>
+          <div class="x-post-box">
+            <div class="x-post-header">
+              <div class="x-avatar">T</div>
+              <div>
+                <div class="x-name">TechTime</div>
+                <div class="x-handle">@techtime_jp</div>
               </div>
-              <div class="result-content" id="xPostContent"></div>
             </div>
-            <button class="btn btn-secondary copy-btn" onclick="copyXPost()">投稿文をコピー</button>
+            <div class="result-content" id="xPostContent"></div>
           </div>
+          <button class="btn btn-secondary copy-btn" onclick="copyXPost()">投稿文をコピー</button>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // タブ切り替え
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-        tab.classList.add('active');
-        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-      });
-    });
-
     // ステータス確認
     async function checkStatus() {
       try {
@@ -458,59 +449,14 @@
     }
     checkStatus();
 
-    // 下書き生成
-    document.getElementById('btnDraft').addEventListener('click', async () => {
-      const title = document.getElementById('draftTitle').value.trim();
-      if (!title) {
-        alert('タイトルを入力してください');
-        return;
-      }
-
-      const btn = document.getElementById('btnDraft');
-      const loading = document.getElementById('loadingDraft');
-      const result = document.getElementById('resultDraft');
-
-      btn.disabled = true;
-      loading.classList.add('show');
-      result.classList.remove('show');
-
-      try {
-        const res = await fetch('/api/draft', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title })
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        document.getElementById('articleContent').textContent = data.articleContent;
-        document.getElementById('outputPath').textContent = data.outputPath || '(未保存)';
-
-        // 公開タブに自動入力
-        document.getElementById('publishTitle').value = title;
-        document.getElementById('articleTextarea').value = data.articleContent || '';
-
-        result.classList.add('show');
-      } catch (e) {
-        alert('エラー: ' + e.message);
-      } finally {
-        btn.disabled = false;
-        loading.classList.remove('show');
-      }
-    });
-
-    // 公開
+    // 公開処理
     document.getElementById('btnPublish').addEventListener('click', async () => {
+      const notionPageId = document.getElementById('notionPageId').value.trim();
       const title = document.getElementById('publishTitle').value.trim();
-      const notionUrl = document.getElementById('notionUrl').value.trim();
       const articleContent = document.getElementById('articleTextarea').value.trim();
 
-      if (!title || !notionUrl || !articleContent) {
-        alert('全ての項目を入力してください');
+      if (!notionPageId || !articleContent) {
+        alert('NotionページIDと記事本文は必須です');
         return;
       }
 
@@ -526,7 +472,11 @@
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, notionUrl, articleContent })
+          body: JSON.stringify({
+            title: title || undefined,
+            notionPageId,
+            articleContent
+          })
         });
 
         const data = await res.json();
@@ -535,10 +485,44 @@
           throw new Error(data.error);
         }
 
-        document.getElementById('resultNotionUrl').href = data.notionUrl;
-        document.getElementById('resultNotionUrl').textContent = data.notionUrl;
+        // 結果表示
+        document.getElementById('resultPageId').textContent = data.notionPageId;
         document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
         document.getElementById('xPostContent').textContent = data.xPost;
+
+        // メタデータ表示
+        const metadata = data.metadata || {};
+        const metadataHtml = `
+          <div class="metadata-item">
+            <span class="metadata-label">カテゴリ</span>
+            <span class="metadata-value">${metadata.category || '-'}</span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">Slug</span>
+            <span class="metadata-value">${metadata.slug || '-'}</span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">SEOキーワード</span>
+            <span class="metadata-value">${(metadata.seoKeywords || []).join(', ') || '-'}</span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">サブカテゴリ</span>
+            <div class="tag-list">${(metadata.subCategories || []).map(s => `<span class="tag">${s}</span>`).join('') || '-'}</div>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">テーマカテゴリ</span>
+            <div class="tag-list">${(metadata.themeCategories || []).map(t => `<span class="tag">${t}</span>`).join('') || '-'}</div>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">タグ</span>
+            <div class="tag-list">${(metadata.tags || []).map(t => `<span class="tag">${t}</span>`).join('') || '-'}</div>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">ターゲット読者</span>
+            <div class="tag-list">${(metadata.targetReaders || []).map(r => `<span class="tag">${r}</span>`).join('') || '-'}</div>
+          </div>
+        `;
+        document.getElementById('metadataPreview').innerHTML = metadataHtml;
 
         result.classList.add('show');
       } catch (e) {
@@ -550,13 +534,6 @@
     });
 
     // コピー機能
-    function copyArticle() {
-      const text = document.getElementById('articleContent').textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        alert('記事をコピーしました');
-      });
-    }
-
     function copyXPost() {
       const text = document.getElementById('xPostContent').textContent;
       navigator.clipboard.writeText(text).then(() => {

@@ -1,15 +1,15 @@
 import fs from 'fs';
 import { validateEnv } from '../config/settings';
 import {
-  generateMetadata,
+  generateMetadataWithOptions,
   generateThumbnailInfo,
   generateXPost,
 } from '../services/claude';
 import {
-  extractPageId,
+  getDatabaseOptions,
   saveArticleToNotion,
   updateNotionProperties,
-  setThumbnailUrl,
+  setCoverImageUrl,
   saveBackup,
 } from '../services/notion';
 import { generateThumbnailImage } from '../services/gemini';
@@ -17,71 +17,83 @@ import { uploadToImgbb } from '../services/imgbb';
 
 export interface PublishOptions {
   title: string;
-  notionUrl: string;
-  draftFile?: string;
+  notionPageId: string;
+  articleFile: string;
 }
 
 export interface PublishResult {
-  notionUrl: string;
+  notionPageId: string;
   thumbnailUrl: string;
   xPost: string;
+}
+
+// タイトルをMarkdownの最初の見出しから抽出
+function extractTitleFromMarkdown(content: string): string {
+  const lines = content.split('\n');
+  for (const line of lines) {
+    // # で始まる見出しを探す
+    const match = line.match(/^#\s+(.+)$/);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  return 'Untitled';
 }
 
 export async function publishCommand(
   options: PublishOptions
 ): Promise<PublishResult> {
   console.log('\n=== TechTimeブログ公開処理 ===\n');
-  console.log(`タイトル: ${options.title}`);
-  console.log(`Notion URL: ${options.notionUrl}\n`);
 
   // 環境変数の検証
   validateEnv();
 
-  // Step 1: 下書きファイルを読み込み
-  console.log('--- Step 1: 下書き読み込み ---');
-  if (!options.draftFile) {
-    throw new Error(
-      '下書きファイルパス（--draft-file）を指定してください'
-    );
+  // Step 1: 記事ファイルを読み込み
+  console.log('--- Step 1: 記事読み込み ---');
+  if (!fs.existsSync(options.articleFile)) {
+    throw new Error(`記事ファイルが見つかりません: ${options.articleFile}`);
   }
 
-  if (!fs.existsSync(options.draftFile)) {
-    throw new Error(`下書きファイルが見つかりません: ${options.draftFile}`);
-  }
-
-  const articleContent = fs.readFileSync(options.draftFile, 'utf-8');
+  const articleContent = fs.readFileSync(options.articleFile, 'utf-8');
   const wordCount = articleContent.replace(/\s/g, '').length;
-  console.log(`下書きを読み込みました（${wordCount}文字）\n`);
 
-  // ページIDを抽出
-  const pageId = extractPageId(options.notionUrl);
-  console.log(`ページID: ${pageId}\n`);
+  // タイトルを抽出（オプションで指定されていない場合はMarkdownから）
+  const title = options.title || extractTitleFromMarkdown(articleContent);
 
-  // Step 2: メタデータを生成
-  console.log('--- Step 2: メタデータ生成 ---');
-  const metadata = await generateMetadata(articleContent);
+  console.log(`タイトル: ${title}`);
+  console.log(`文字数: ${wordCount}文字`);
+  console.log(`Notion ページID: ${options.notionPageId}\n`);
+
+  // Step 2: Notionから既存オプションを取得
+  console.log('--- Step 2: 既存オプション取得 ---');
+  const dbOptions = await getDatabaseOptions();
+  console.log('');
+
+  // Step 3: メタデータを生成（既存オプションから選択）
+  console.log('--- Step 3: メタデータ生成 ---');
+  const metadata = await generateMetadataWithOptions(articleContent, title, dbOptions);
   console.log('メタデータ:', JSON.stringify(metadata, null, 2), '\n');
 
-  // Step 3: Notionに記事を保存
-  console.log('--- Step 3: Notion保存 ---');
+  // Step 4: Notionに記事を保存
+  console.log('--- Step 4: Notion保存 ---');
   try {
-    await saveArticleToNotion(pageId, articleContent);
-    await updateNotionProperties(pageId, options.title, metadata, wordCount);
+    await saveArticleToNotion(options.notionPageId, articleContent);
+    await updateNotionProperties(options.notionPageId, title, metadata, wordCount);
   } catch (error) {
     console.error('Notion保存に失敗しました。バックアップを作成します...');
-    const backupPath = saveBackup(options.title, articleContent, metadata);
+    const backupPath = saveBackup(title, articleContent, metadata);
     console.log(`バックアップ: ${backupPath}`);
     throw error;
   }
   console.log('');
 
-  // Step 4: サムネイル情報を生成
-  console.log('--- Step 4: サムネイル情報生成 ---');
-  const thumbnailInfo = await generateThumbnailInfo(options.title, articleContent);
+  // Step 5: サムネイル情報を生成
+  console.log('--- Step 5: サムネイル情報生成 ---');
+  const thumbnailInfo = await generateThumbnailInfo(title, articleContent);
   console.log('サムネイル情報:', JSON.stringify(thumbnailInfo, null, 2), '\n');
 
-  // Step 5: サムネイル画像を生成
-  console.log('--- Step 5: サムネイル画像生成 ---');
+  // Step 6: サムネイル画像を生成
+  console.log('--- Step 6: サムネイル画像生成 ---');
   const thumbnailResult = await generateThumbnailImage(
     thumbnailInfo.mainTitle,
     thumbnailInfo.subTitle,
@@ -89,21 +101,21 @@ export async function publishCommand(
   );
   console.log('');
 
-  // Step 6: imgbbにアップロード
-  console.log('--- Step 6: imgbbアップロード ---');
+  // Step 7: imgbbにアップロード
+  console.log('--- Step 7: imgbbアップロード ---');
   const imgbbResult = await uploadToImgbb(
     thumbnailResult.imageData,
     `techtime-${metadata.slug}`
   );
   console.log(`画像URL: ${imgbbResult.url}\n`);
 
-  // Step 7: NotionにサムネイルURLを設定
-  console.log('--- Step 7: サムネイルURL設定 ---');
-  await setThumbnailUrl(pageId, imgbbResult.url);
+  // Step 8: Notionにカバー画像URLを設定
+  console.log('--- Step 8: カバー画像設定 ---');
+  await setCoverImageUrl(options.notionPageId, imgbbResult.url);
   console.log('');
 
-  // Step 8: X投稿文を生成
-  console.log('--- Step 8: X投稿文生成 ---');
+  // Step 9: X投稿文を生成
+  console.log('--- Step 9: X投稿文生成 ---');
   const xPost = await generateXPost(articleContent);
   console.log('');
 
@@ -111,7 +123,7 @@ export async function publishCommand(
   console.log('='.repeat(60));
   console.log('公開処理完了!');
   console.log('='.repeat(60));
-  console.log(`\nNotion URL: ${options.notionUrl}`);
+  console.log(`\nNotion ページID: ${options.notionPageId}`);
   console.log(`サムネイルURL: ${imgbbResult.url}`);
   console.log(`\nX投稿文（${xPost.length}文字）:`);
   console.log('-'.repeat(40));
@@ -121,7 +133,7 @@ export async function publishCommand(
   console.log('\n=== 公開処理完了 ===');
 
   return {
-    notionUrl: options.notionUrl,
+    notionPageId: options.notionPageId,
     thumbnailUrl: imgbbResult.url,
     xPost,
   };

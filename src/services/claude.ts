@@ -1,12 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config, retryConfig } from '../config/settings';
-import {
-  researchPrompt,
-  articlePrompt,
-  metadataPrompt,
-} from '../templates/article';
 import { thumbnailInfoPrompt } from '../templates/thumbnail';
 import { xpostPrompt } from '../templates/xpost';
+import type { DatabaseOptions } from './notion';
 
 let client: Anthropic | null = null;
 
@@ -49,110 +45,64 @@ async function withRetry<T>(
   );
 }
 
-export interface ResearchResult {
-  content: string;
-  references: string[];
-}
-
-export async function performResearch(
-  title: string,
-  strategyGuide: string
-): Promise<ResearchResult> {
-  return withRetry(async () => {
-    const anthropic = getClient();
-    const prompt = researchPrompt(title, strategyGuide);
-
-    console.log('Webリサーチを実行中...');
-
-    const response = await anthropic.messages.create({
-      model: config.claude.model,
-      max_tokens: 8192,
-      tools: [
-        {
-          type: 'web_search_20250305',
-          name: 'web_search',
-        } as any,
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    // レスポンスからテキストを抽出
-    let content = '';
-    const references: string[] = [];
-
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        content += block.text;
-      }
-    }
-
-    // 参考URLを抽出（簡易的なパターンマッチング）
-    const urlPattern = /https?:\/\/[^\s\)]+/g;
-    const matches = content.match(urlPattern);
-    if (matches) {
-      references.push(...new Set(matches));
-    }
-
-    return { content, references };
-  }, 'Webリサーチ');
-}
-
-export async function generateArticle(
-  title: string,
-  researchResult: string,
-  strategyGuide: string
-): Promise<string> {
-  return withRetry(async () => {
-    const anthropic = getClient();
-    const prompt = articlePrompt(title, researchResult, strategyGuide);
-
-    console.log('記事を生成中...');
-
-    const response = await anthropic.messages.create({
-      model: config.claude.model,
-      max_tokens: 8192,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    let content = '';
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        content += block.text;
-      }
-    }
-
-    return content;
-  }, '記事生成');
-}
-
 export interface ArticleMetadata {
   category: string;
   slug: string;
   seoKeywords: string[];
-  subCategory: string;
+  subCategories: string[];
   tags: string[];
-  targetReaders: string;
-  themeCategory: string;
-  articlePurpose: string;
-  readerInsight: string;
+  targetReaders: string[];
+  themeCategories: string[];
 }
 
-export async function generateMetadata(
-  articleContent: string
+// 既存のオプションを使ってメタデータを生成
+export async function generateMetadataWithOptions(
+  articleContent: string,
+  title: string,
+  options: DatabaseOptions
 ): Promise<ArticleMetadata> {
   return withRetry(async () => {
     const anthropic = getClient();
-    const prompt = metadataPrompt(articleContent);
+
+    const prompt = `以下の記事内容を分析し、Notionプロパティ用のメタデータを生成してください。
+
+【重要】カテゴリ、サブカテゴリ、テーマカテゴリ、タグ、ターゲット読者は、必ず以下の既存オプションから選択してください。新しい値を創作しないでください。
+
+## 既存オプション
+
+### カテゴリ（1つ選択）
+${options.categories.join(', ')}
+
+### サブカテゴリ（1-3個選択）
+${options.subCategories.join(', ')}
+
+### テーマカテゴリ（1-2個選択）
+${options.themeCategories.join(', ')}
+
+### タグ（1-5個選択）
+${options.tags.join(', ')}
+
+### ターゲット読者（1-3個選択）
+${options.targetReaders.join(', ')}
+
+## 記事タイトル
+${title}
+
+## 記事内容
+${articleContent}
+
+## 出力形式（JSON）
+{
+  "category": "上記カテゴリから1つ選択",
+  "slug": "URLスラッグ（英数字とハイフンのみ、小文字、タイトルから生成）",
+  "seoKeywords": ["SEOキーワード1", "SEOキーワード2", "SEOキーワード3"],
+  "subCategories": ["上記サブカテゴリから1-3個選択"],
+  "tags": ["上記タグから1-5個選択"],
+  "targetReaders": ["上記ターゲット読者から1-3個選択"],
+  "themeCategories": ["上記テーマカテゴリから1-2個選択"]
+}
+
+JSONのみを出力してください。`;
 
     console.log('メタデータを生成中...');
 
@@ -180,7 +130,20 @@ export async function generateMetadata(
       throw new Error('メタデータのJSON抽出に失敗しました');
     }
 
-    return JSON.parse(jsonMatch[0]) as ArticleMetadata;
+    const metadata = JSON.parse(jsonMatch[0]) as ArticleMetadata;
+
+    // オプションの検証
+    if (!options.categories.includes(metadata.category)) {
+      console.warn(`警告: カテゴリ "${metadata.category}" は既存オプションにありません。最初のカテゴリを使用します。`);
+      metadata.category = options.categories[0] || 'career';
+    }
+
+    metadata.subCategories = metadata.subCategories.filter(sc => options.subCategories.includes(sc));
+    metadata.themeCategories = metadata.themeCategories.filter(tc => options.themeCategories.includes(tc));
+    metadata.tags = metadata.tags.filter(tag => options.tags.includes(tag));
+    metadata.targetReaders = metadata.targetReaders.filter(tr => options.targetReaders.includes(tr));
+
+    return metadata;
   }, 'メタデータ生成');
 }
 

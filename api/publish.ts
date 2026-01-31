@@ -3,22 +3,64 @@ import { Client } from '@notionhq/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Notion ページIDを抽出
-function extractPageId(notionUrl: string): string {
-  const patterns = [
-    /([a-f0-9]{32})(?:\?|$)/i,
-    /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(?:\?|$)/i,
-    /-([a-f0-9]{32})(?:\?|$)/i,
-  ];
+// Notion プロパティマッピング
+const notionPropertyMapping = {
+  title: '名前',
+  category: 'Category',
+  slug: 'Slug',
+  seoKeywords: 'SEOキーワード',
+  subCategory: 'サブカテゴリ',
+  status: 'ステータス',
+  tags: 'タグ',
+  targetReaders: 'ターゲット読者',
+  themeCategory: 'テーマカテゴリ',
+  wordCount: '想定文字数',
+};
 
-  for (const pattern of patterns) {
-    const match = notionUrl.match(pattern);
-    if (match) {
-      return match[1].replace(/-/g, '');
+// 既存のオプション取得
+async function getDatabaseOptions(notion: Client, databaseId: string) {
+  const database = await notion.databases.retrieve({
+    database_id: databaseId,
+  }) as any;
+
+  const properties = database.properties;
+
+  const categories: string[] = [];
+  if (properties[notionPropertyMapping.category]?.select?.options) {
+    for (const opt of properties[notionPropertyMapping.category].select.options) {
+      categories.push(opt.name);
     }
   }
 
-  throw new Error(`無効なNotionページURL: ${notionUrl}`);
+  const subCategories: string[] = [];
+  if (properties[notionPropertyMapping.subCategory]?.multi_select?.options) {
+    for (const opt of properties[notionPropertyMapping.subCategory].multi_select.options) {
+      subCategories.push(opt.name);
+    }
+  }
+
+  const themeCategories: string[] = [];
+  if (properties[notionPropertyMapping.themeCategory]?.multi_select?.options) {
+    for (const opt of properties[notionPropertyMapping.themeCategory].multi_select.options) {
+      themeCategories.push(opt.name);
+    }
+  }
+
+  const tags: string[] = [];
+  if (properties[notionPropertyMapping.tags]?.multi_select?.options) {
+    for (const opt of properties[notionPropertyMapping.tags].multi_select.options) {
+      tags.push(opt.name);
+    }
+  }
+
+  const targetReaders: string[] = [];
+  if (properties[notionPropertyMapping.targetReaders]?.multi_select?.options) {
+    for (const opt of properties[notionPropertyMapping.targetReaders].multi_select.options) {
+      targetReaders.push(opt.name);
+    }
+  }
+
+  return { categories, subCategories, themeCategories, tags, targetReaders };
 }
 
 // Markdown を Notion ブロックに変換
@@ -97,57 +139,96 @@ function markdownToNotionBlocks(markdown: string): any[] {
   return blocks;
 }
 
+// タイトルをMarkdownから抽出
+function extractTitleFromMarkdown(content: string): string {
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const match = line.match(/^#\s+(.+)$/);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  return 'Untitled';
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { title, notionUrl, articleContent } = req.body;
+    const { title: inputTitle, notionPageId, articleContent } = req.body;
 
-    if (!title || !notionUrl || !articleContent) {
+    if (!notionPageId || !articleContent) {
       return res.status(400).json({
-        error: 'title, notionUrl, articleContent は必須です'
+        error: 'notionPageId, articleContent は必須です'
       });
     }
 
     // 環境変数チェック
     if (!process.env.CLAUDE_API_KEY || !process.env.NOTION_API_KEY ||
-        !process.env.GEMINI_API_KEY || !process.env.IMGBB_API_KEY) {
+        !process.env.NOTION_DATABASE_ID || !process.env.GEMINI_API_KEY ||
+        !process.env.IMGBB_API_KEY) {
       return res.status(500).json({ error: 'APIキーが設定されていません' });
     }
 
-    const pageId = extractPageId(notionUrl);
+    const title = inputTitle || extractTitleFromMarkdown(articleContent);
     const wordCount = articleContent.replace(/\s/g, '').length;
 
     // Notion クライアント
     const notion = new Client({ auth: process.env.NOTION_API_KEY });
-
-    // Step 1: メタデータ生成
     const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+
+    // Step 1: 既存オプション取得
+    console.log('Step 1: 既存オプション取得');
+    const options = await getDatabaseOptions(notion, process.env.NOTION_DATABASE_ID);
+
+    // Step 2: メタデータ生成（既存オプションから選択）
+    console.log('Step 2: メタデータ生成');
+    const metadataPrompt = `以下の記事内容を分析し、Notionプロパティ用のメタデータを生成してください。
+
+【重要】カテゴリ、サブカテゴリ、テーマカテゴリ、タグ、ターゲット読者は、必ず以下の既存オプションから選択してください。新しい値を創作しないでください。
+
+## 既存オプション
+
+### カテゴリ（1つ選択）
+${options.categories.join(', ')}
+
+### サブカテゴリ（1-3個選択）
+${options.subCategories.join(', ')}
+
+### テーマカテゴリ（1-2個選択）
+${options.themeCategories.join(', ')}
+
+### タグ（1-5個選択）
+${options.tags.join(', ')}
+
+### ターゲット読者（1-3個選択）
+${options.targetReaders.join(', ')}
+
+## 記事タイトル
+${title}
+
+## 記事内容
+${articleContent.slice(0, 4000)}
+
+## 出力形式（JSON）
+{
+  "category": "上記カテゴリから1つ選択",
+  "slug": "URLスラッグ（英数字とハイフンのみ、小文字、タイトルから生成）",
+  "seoKeywords": ["SEOキーワード1", "SEOキーワード2", "SEOキーワード3"],
+  "subCategories": ["上記サブカテゴリから1-3個選択"],
+  "tags": ["上記タグから1-5個選択"],
+  "targetReaders": ["上記ターゲット読者から1-3個選択"],
+  "themeCategories": ["上記テーマカテゴリから1-2個選択"]
+}
+
+JSONのみを出力してください。`;
 
     const metadataResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: `以下の記事内容を分析し、Notionプロパティ用のメタデータを生成してください。
-
-## 記事内容
-${articleContent.slice(0, 3000)}
-
-## 出力形式（JSON）
-{
-  "category": "カテゴリ（system-dev/management-dx/industry/career/ceo-columnのいずれか）",
-  "slug": "URLスラッグ（英数字とハイフンのみ、小文字）",
-  "seoKeywords": ["SEOキーワード1", "SEOキーワード2", "SEOキーワード3"],
-  "subCategory": "サブカテゴリ",
-  "tags": ["タグ1", "タグ2", "タグ3"],
-  "targetReaders": "ターゲット読者の説明"
-}
-
-JSONのみを出力してください。`
-      }],
+      messages: [{ role: 'user', content: metadataPrompt }],
     });
 
     let metadataContent = '';
@@ -159,32 +240,47 @@ JSONのみを出力してください。`
     const jsonMatch = metadataContent.match(/\{[\s\S]*\}/);
     const metadata = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
-    // Step 2: Notion に記事保存
+    // オプションの検証
+    if (!options.categories.includes(metadata.category)) {
+      metadata.category = options.categories[0] || 'career';
+    }
+    metadata.subCategories = (metadata.subCategories || []).filter((sc: string) => options.subCategories.includes(sc));
+    metadata.themeCategories = (metadata.themeCategories || []).filter((tc: string) => options.themeCategories.includes(tc));
+    metadata.tags = (metadata.tags || []).filter((tag: string) => options.tags.includes(tag));
+    metadata.targetReaders = (metadata.targetReaders || []).filter((tr: string) => options.targetReaders.includes(tr));
+
+    // Step 3: Notion に記事保存
+    console.log('Step 3: Notion に記事保存');
     const blocks = markdownToNotionBlocks(articleContent);
     const chunkSize = 100;
     for (let i = 0; i < blocks.length; i += chunkSize) {
       const chunk = blocks.slice(i, i + chunkSize);
       await notion.blocks.children.append({
-        block_id: pageId,
+        block_id: notionPageId,
         children: chunk,
       });
     }
 
-    // Step 3: プロパティ更新
+    // Step 4: プロパティ更新
+    console.log('Step 4: プロパティ更新');
     await notion.pages.update({
-      page_id: pageId,
+      page_id: notionPageId,
       properties: {
-        '名前': { title: [{ text: { content: title } }] },
-        'Category': { select: { name: metadata.category || 'industry' } },
-        'Slug': { rich_text: [{ text: { content: metadata.slug || '' } }] },
-        'SEOキーワード': { rich_text: [{ text: { content: (metadata.seoKeywords || []).join(', ') } }] },
-        'ステータス': { select: { name: 'レビュー中' } },
-        'タグ': { multi_select: (metadata.tags || []).map((tag: string) => ({ name: tag })) },
-        '想定文字数': { select: { name: wordCount >= 4000 ? '4000字' : '3500字' } },
+        [notionPropertyMapping.title]: { title: [{ text: { content: title } }] },
+        [notionPropertyMapping.category]: { select: { name: metadata.category } },
+        [notionPropertyMapping.slug]: { rich_text: [{ text: { content: metadata.slug || '' } }] },
+        [notionPropertyMapping.seoKeywords]: { rich_text: [{ text: { content: (metadata.seoKeywords || []).join(', ') } }] },
+        [notionPropertyMapping.subCategory]: { multi_select: (metadata.subCategories || []).map((sc: string) => ({ name: sc })) },
+        [notionPropertyMapping.status]: { select: { name: 'レビュー中' } },
+        [notionPropertyMapping.tags]: { multi_select: (metadata.tags || []).map((tag: string) => ({ name: tag })) },
+        [notionPropertyMapping.targetReaders]: { multi_select: (metadata.targetReaders || []).map((tr: string) => ({ name: tr })) },
+        [notionPropertyMapping.themeCategory]: { multi_select: (metadata.themeCategories || []).map((tc: string) => ({ name: tc })) },
+        [notionPropertyMapping.wordCount]: { select: { name: wordCount >= 4000 ? '4000字' : '3500字' } },
       },
     });
 
-    // Step 4: サムネイル情報生成
+    // Step 5: サムネイル情報生成
+    console.log('Step 5: サムネイル情報生成');
     const thumbnailInfoResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
@@ -197,7 +293,7 @@ ${title}
 
 ## 出力形式（JSON）
 {
-  "mainTitle": "メインタイトル（2行に分けて）",
+  "mainTitle": "メインタイトル（2行に分けて、\\nで区切る）",
   "subTitle": "サブタイトル（20文字以内）",
   "backgroundTheme": "背景テーマ（英語で）"
 }
@@ -219,7 +315,8 @@ JSONのみを出力してください。`
       backgroundTheme: 'modern office workspace'
     };
 
-    // Step 5: Gemini で画像生成
+    // Step 6: Gemini で画像生成
+    console.log('Step 6: Gemini で画像生成');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
@@ -248,7 +345,8 @@ JSONのみを出力してください。`
 
     let thumbnailUrl = '';
     if (imageData) {
-      // Step 6: imgbb にアップロード
+      // Step 7: imgbb にアップロード
+      console.log('Step 7: imgbb にアップロード');
       const formData = new URLSearchParams();
       formData.append('key', process.env.IMGBB_API_KEY);
       formData.append('image', imageData.toString('base64'));
@@ -263,19 +361,20 @@ JSONのみを出力してください。`
       if (imgbbResult.success) {
         thumbnailUrl = imgbbResult.data.url;
 
-        // Notion にサムネイル URL 設定
+        // Step 8: Notion にカバー画像を設定
+        console.log('Step 8: Notion にカバー画像を設定');
         await notion.pages.update({
-          page_id: pageId,
-          properties: {
-            'ファイル&メディア': {
-              files: [{ type: 'external', name: 'thumbnail.png', external: { url: thumbnailUrl } }],
-            },
+          page_id: notionPageId,
+          cover: {
+            type: 'external',
+            external: { url: thumbnailUrl },
           },
         });
       }
     }
 
-    // Step 7: X 投稿文生成
+    // Step 9: X 投稿文生成
+    console.log('Step 9: X 投稿文生成');
     const xPostResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 256,
@@ -307,9 +406,10 @@ X投稿文のみを出力してください（140文字以内）。`
 
     res.json({
       success: true,
-      notionUrl,
+      notionPageId,
       thumbnailUrl,
       xPost: xPost.trim(),
+      metadata,
     });
   } catch (error) {
     console.error('Publish error:', error);

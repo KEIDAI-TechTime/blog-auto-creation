@@ -4,6 +4,15 @@ import type { ArticleMetadata } from './claude';
 import fs from 'fs';
 import path from 'path';
 
+// 既存のカテゴリ・サブカテゴリなどのオプション
+export interface DatabaseOptions {
+  categories: string[];
+  subCategories: string[];
+  themeCategories: string[];
+  tags: string[];
+  targetReaders: string[];
+}
+
 let client: Client | null = null;
 
 function getClient(): Client {
@@ -43,6 +52,71 @@ async function withRetry<T>(
   throw new Error(
     `${operationName} が${retryConfig.maxRetries}回の試行後に失敗しました: ${lastError?.message}`
   );
+}
+
+// Notionデータベースから既存のオプションを取得
+export async function getDatabaseOptions(): Promise<DatabaseOptions> {
+  return withRetry(async () => {
+    const notion = getClient();
+
+    console.log('Notionデータベースから既存オプションを取得中...');
+
+    const database = await notion.databases.retrieve({
+      database_id: config.notion.databaseId,
+    }) as any;
+
+    const properties = database.properties;
+
+    // カテゴリ（select）
+    const categories: string[] = [];
+    if (properties[notionPropertyMapping.category]?.select?.options) {
+      for (const opt of properties[notionPropertyMapping.category].select.options) {
+        categories.push(opt.name);
+      }
+    }
+
+    // サブカテゴリ（multi_select）
+    const subCategories: string[] = [];
+    if (properties[notionPropertyMapping.subCategory]?.multi_select?.options) {
+      for (const opt of properties[notionPropertyMapping.subCategory].multi_select.options) {
+        subCategories.push(opt.name);
+      }
+    }
+
+    // テーマカテゴリ（multi_select）
+    const themeCategories: string[] = [];
+    if (properties[notionPropertyMapping.themeCategory]?.multi_select?.options) {
+      for (const opt of properties[notionPropertyMapping.themeCategory].multi_select.options) {
+        themeCategories.push(opt.name);
+      }
+    }
+
+    // タグ（multi_select）
+    const tags: string[] = [];
+    if (properties[notionPropertyMapping.tags]?.multi_select?.options) {
+      for (const opt of properties[notionPropertyMapping.tags].multi_select.options) {
+        tags.push(opt.name);
+      }
+    }
+
+    // ターゲット読者（multi_select）
+    const targetReaders: string[] = [];
+    if (properties[notionPropertyMapping.targetReaders]?.multi_select?.options) {
+      for (const opt of properties[notionPropertyMapping.targetReaders].multi_select.options) {
+        targetReaders.push(opt.name);
+      }
+    }
+
+    console.log(`取得完了: カテゴリ${categories.length}件, サブカテゴリ${subCategories.length}件, テーマカテゴリ${themeCategories.length}件, タグ${tags.length}件, ターゲット読者${targetReaders.length}件`);
+
+    return {
+      categories,
+      subCategories,
+      themeCategories,
+      tags,
+      targetReaders,
+    };
+  }, 'データベースオプション取得');
 }
 
 // NotionページURLからページIDを抽出
@@ -336,7 +410,7 @@ export async function updateNotionProperties(
         rich_text: [{ text: { content: metadata.seoKeywords.join(', ') } }],
       },
       [notionPropertyMapping.subCategory]: {
-        select: { name: metadata.subCategory },
+        multi_select: metadata.subCategories.map((sc) => ({ name: sc })),
       },
       [notionPropertyMapping.status]: {
         select: { name: 'レビュー中' },
@@ -345,19 +419,13 @@ export async function updateNotionProperties(
         multi_select: metadata.tags.map((tag) => ({ name: tag })),
       },
       [notionPropertyMapping.targetReaders]: {
-        rich_text: [{ text: { content: metadata.targetReaders } }],
+        multi_select: metadata.targetReaders.map((tr) => ({ name: tr })),
       },
       [notionPropertyMapping.themeCategory]: {
-        select: { name: metadata.themeCategory },
+        multi_select: metadata.themeCategories.map((tc) => ({ name: tc })),
       },
       [notionPropertyMapping.wordCount]: {
         select: { name: wordCountCategory },
-      },
-      [notionPropertyMapping.articlePurpose]: {
-        rich_text: [{ text: { content: metadata.articlePurpose } }],
-      },
-      [notionPropertyMapping.readerInsight]: {
-        rich_text: [{ text: { content: metadata.readerInsight } }],
       },
     };
 
@@ -370,33 +438,26 @@ export async function updateNotionProperties(
   }, 'Notionプロパティ更新');
 }
 
-// サムネイルURLを設定
-export async function setThumbnailUrl(
+// カバー画像URLを設定（ページのカバー画像として設定）
+export async function setCoverImageUrl(
   pageId: string,
   imageUrl: string
 ): Promise<void> {
   return withRetry(async () => {
     const notion = getClient();
 
-    console.log('サムネイルURLを設定中...');
+    console.log('カバー画像URLを設定中...');
 
     await notion.pages.update({
       page_id: pageId,
-      properties: {
-        [notionPropertyMapping.fileMedia]: {
-          files: [
-            {
-              type: 'external',
-              name: 'thumbnail.png',
-              external: { url: imageUrl },
-            },
-          ],
-        },
+      cover: {
+        type: 'external',
+        external: { url: imageUrl },
       },
     });
 
-    console.log('サムネイルURLの設定が完了しました');
-  }, 'サムネイルURL設定');
+    console.log('カバー画像URLの設定が完了しました');
+  }, 'カバー画像URL設定');
 }
 
 // ローカルにバックアップを保存
