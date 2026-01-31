@@ -10,7 +10,6 @@ const notionPropertyMapping = {
   subCategory: 'サブカテゴリ',
   status: 'ステータス',
   tags: 'タグ',
-  targetReaders: 'ターゲット読者',
   themeCategory: 'テーマカテゴリ',
   wordCount: '想定文字数',
 };
@@ -173,11 +172,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [notionPropertyMapping.category]: { select: { name: metadata.category } },
         [notionPropertyMapping.slug]: { rich_text: [{ text: { content: metadata.slug || '' } }] },
         [notionPropertyMapping.seoKeywords]: { rich_text: [{ text: { content: (metadata.seoKeywords || []).join(', ') } }] },
-        [notionPropertyMapping.subCategory]: { multi_select: (metadata.subCategories || []).map((sc: string) => ({ name: sc })) },
+        [notionPropertyMapping.subCategory]: { select: { name: (metadata.subCategories || [])[0] || '' } },
         [notionPropertyMapping.status]: { select: { name: 'レビュー中' } },
         [notionPropertyMapping.tags]: { multi_select: (metadata.tags || []).map((tag: string) => ({ name: tag })) },
-        [notionPropertyMapping.targetReaders]: { multi_select: (metadata.targetReaders || []).map((tr: string) => ({ name: tr })) },
-        [notionPropertyMapping.themeCategory]: { multi_select: (metadata.themeCategories || []).map((tc: string) => ({ name: tc })) },
+        [notionPropertyMapping.themeCategory]: { select: { name: (metadata.themeCategories || [])[0] || '' } },
         [notionPropertyMapping.wordCount]: { select: { name: wordCount >= 4000 ? '4000字' : '3500字' } },
       },
     });

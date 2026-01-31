@@ -9,7 +9,6 @@ const notionPropertyMapping = {
   subCategory: 'サブカテゴリ',
   themeCategory: 'テーマカテゴリ',
   tags: 'タグ',
-  targetReaders: 'ターゲット読者',
 };
 
 // 既存のオプション取得
@@ -28,15 +27,15 @@ async function getDatabaseOptions(notion: Client, databaseId: string) {
   }
 
   const subCategories: string[] = [];
-  if (properties[notionPropertyMapping.subCategory]?.multi_select?.options) {
-    for (const opt of properties[notionPropertyMapping.subCategory].multi_select.options) {
+  if (properties[notionPropertyMapping.subCategory]?.select?.options) {
+    for (const opt of properties[notionPropertyMapping.subCategory].select.options) {
       subCategories.push(opt.name);
     }
   }
 
   const themeCategories: string[] = [];
-  if (properties[notionPropertyMapping.themeCategory]?.multi_select?.options) {
-    for (const opt of properties[notionPropertyMapping.themeCategory].multi_select.options) {
+  if (properties[notionPropertyMapping.themeCategory]?.select?.options) {
+    for (const opt of properties[notionPropertyMapping.themeCategory].select.options) {
       themeCategories.push(opt.name);
     }
   }
@@ -48,14 +47,7 @@ async function getDatabaseOptions(notion: Client, databaseId: string) {
     }
   }
 
-  const targetReaders: string[] = [];
-  if (properties[notionPropertyMapping.targetReaders]?.multi_select?.options) {
-    for (const opt of properties[notionPropertyMapping.targetReaders].multi_select.options) {
-      targetReaders.push(opt.name);
-    }
-  }
-
-  return { categories, subCategories, themeCategories, tags, targetReaders };
+  return { categories, subCategories, themeCategories, tags };
 }
 
 // タイトルをMarkdownから抽出
@@ -105,24 +97,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Step 2: メタデータ生成');
     const metadataPrompt = `以下の記事内容を分析し、Notionプロパティ用のメタデータを生成してください。
 
-【重要】カテゴリ、サブカテゴリ、テーマカテゴリ、タグ、ターゲット読者は、必ず以下の既存オプションから選択してください。新しい値を創作しないでください。
+【重要】カテゴリ、サブカテゴリ、テーマカテゴリ、タグは、必ず以下の既存オプションから選択してください。新しい値を創作しないでください。
 
 ## 既存オプション
 
 ### カテゴリ（1つ選択）
 ${options.categories.join(', ')}
 
-### サブカテゴリ（1-3個選択）
+### サブカテゴリ（1つ選択）
 ${options.subCategories.join(', ')}
 
-### テーマカテゴリ（1-2個選択）
+### テーマカテゴリ（1つ選択）
 ${options.themeCategories.join(', ')}
 
 ### タグ（1-5個選択）
 ${options.tags.join(', ')}
-
-### ターゲット読者（1-3個選択）
-${options.targetReaders.join(', ')}
 
 ## 記事タイトル
 ${title}
@@ -135,10 +124,9 @@ ${articleContent.slice(0, 4000)}
   "category": "上記カテゴリから1つ選択",
   "slug": "URLスラッグ（英数字とハイフンのみ、小文字、タイトルから生成）",
   "seoKeywords": ["SEOキーワード1", "SEOキーワード2", "SEOキーワード3"],
-  "subCategories": ["上記サブカテゴリから1-3個選択"],
+  "subCategories": ["上記サブカテゴリから1つ選択"],
   "tags": ["上記タグから1-5個選択"],
-  "targetReaders": ["上記ターゲット読者から1-3個選択"],
-  "themeCategories": ["上記テーマカテゴリから1-2個選択"]
+  "themeCategories": ["上記テーマカテゴリから1つ選択"]
 }
 
 JSONのみを出力してください。`;
@@ -165,7 +153,6 @@ JSONのみを出力してください。`;
     metadata.subCategories = (metadata.subCategories || []).filter((sc: string) => options.subCategories.includes(sc));
     metadata.themeCategories = (metadata.themeCategories || []).filter((tc: string) => options.themeCategories.includes(tc));
     metadata.tags = (metadata.tags || []).filter((tag: string) => options.tags.includes(tag));
-    metadata.targetReaders = (metadata.targetReaders || []).filter((tr: string) => options.targetReaders.includes(tr));
 
     // Step 3: サムネイル情報生成
     console.log('Step 3: サムネイル情報生成');
