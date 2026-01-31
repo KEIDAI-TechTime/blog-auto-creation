@@ -1,21 +1,32 @@
 {
   "version": 2,
+  "framework": null,
   "builds": [
-    {
-      "src": "api/*.ts",
-      "use": "@vercel/node"
-    },
     {
       "src": "public/**",
       "use": "@vercel/static"
+    },
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|ico|png|jpg|svg))",
+      "dest": "/public/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/index.html"
+    }
   ],
   "functions": {
-    "api/*.ts": {
+    "api/**/*.ts": {
       "maxDuration": 300
     }
   }
