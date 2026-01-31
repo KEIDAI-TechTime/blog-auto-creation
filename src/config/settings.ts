@@ -31,7 +31,7 @@ export const config = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-image-preview',  // 画像生成用モデル
   },
   imgbb: {
     apiKey: process.env.IMGBB_API_KEY || '',

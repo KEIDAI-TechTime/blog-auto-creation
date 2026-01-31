@@ -193,23 +193,33 @@ JSONのみを出力してください。`
     // Step 4: Gemini で画像生成
     console.log('Step 4: Gemini で画像生成');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    // 画像生成には gemini-3-pro-image-preview を使用
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-image-preview' });
 
     const titleLines = thumbnailInfo.mainTitle.split('\n');
     const thumbnailPrompt = `A wide horizontal image (1280x720 aspect ratio) for a blog thumbnail. The background shows ${thumbnailInfo.backgroundTheme}, with a strong blue color grading, heavy blur/depth of field effect, and dim atmospheric lighting with scattered light source highlights. In the center of the image, place a dark charcoal semi-transparent rectangular box, tilted at approximately 5 degrees to the left, with a thin green border line around it. Inside the box, display white bold Japanese text in two lines at the top reading "${titleLines[0] || ''}" on the first line and "${titleLines[1] || ''}" on the second line. At the bottom of the box, display smaller white thin Japanese text reading "${thumbnailInfo.subTitle}". Professional, modern blog thumbnail style.`;
+
+    console.log('Generating image with prompt:', thumbnailPrompt.slice(0, 100) + '...');
 
     const imageResult = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: thumbnailPrompt }] }],
       generationConfig: { responseModalities: ['image', 'text'] } as any,
     });
 
+    console.log('Gemini response received, extracting image...');
+
     let imageData: Buffer | null = null;
     const candidates = imageResult.response.candidates;
+    console.log('Candidates count:', candidates?.length || 0);
+
     if (candidates && candidates.length > 0) {
       for (const candidate of candidates) {
         if (candidate.content && candidate.content.parts) {
+          console.log('Parts count:', candidate.content.parts.length);
           for (const part of candidate.content.parts) {
+            console.log('Part type:', Object.keys(part));
             if ('inlineData' in part && part.inlineData) {
+              console.log('Found inlineData, mimeType:', part.inlineData.mimeType);
               imageData = Buffer.from(part.inlineData.data, 'base64');
               break;
             }
@@ -221,9 +231,9 @@ JSONのみを出力してください。`
     let thumbnailUrl = '';
     if (imageData) {
       // Step 5: imgbb にアップロード
-      console.log('Step 5: imgbb にアップロード');
+      console.log('Step 5: imgbb にアップロード, image size:', imageData.length, 'bytes');
       const formData = new URLSearchParams();
-      formData.append('key', process.env.IMGBB_API_KEY);
+      formData.append('key', process.env.IMGBB_API_KEY!);
       formData.append('image', imageData.toString('base64'));
       formData.append('name', `techtime-${metadata.slug || 'thumbnail'}`);
 
@@ -232,10 +242,17 @@ JSONのみを出力してください。`
         body: formData,
       });
 
-      const imgbbResult = await imgbbResponse.json() as { success: boolean; data: { url: string } };
+      const imgbbResult = await imgbbResponse.json() as { success: boolean; data: { url: string }; error?: { message: string } };
+      console.log('imgbb response:', JSON.stringify(imgbbResult).slice(0, 200));
+
       if (imgbbResult.success) {
         thumbnailUrl = imgbbResult.data.url;
+        console.log('imgbb upload success:', thumbnailUrl);
+      } else {
+        console.error('imgbb upload failed:', imgbbResult.error?.message || 'Unknown error');
       }
+    } else {
+      console.warn('No image data generated from Gemini');
     }
 
     // Step 6: X 投稿文生成
