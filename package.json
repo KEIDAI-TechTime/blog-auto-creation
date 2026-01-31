@@ -1,0 +1,43 @@
+{
+  "name": "techtime-blog-automation",
+  "version": "1.0.0",
+  "description": "TechTimeブログ記事作成自動化CLIツール",
+  "main": "dist/index.js",
+  "bin": {
+    "techtime-blog": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "draft": "ts-node src/index.ts draft",
+    "publish": "ts-node src/index.ts publish",
+    "auto": "ts-node src/index.ts auto"
+  },
+  "keywords": [
+    "blog",
+    "automation",
+    "techtime",
+    "notion",
+    "claude"
+  ],
+  "author": "TechTime",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.21.0",
+    "@notionhq/client": "^2.2.15",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.1",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
