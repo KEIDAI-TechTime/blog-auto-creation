@@ -197,6 +197,11 @@
       color: #28a745; display: none;
     }
     .x-post-success.show { display: block; }
+    .thumbnail-error {
+      background: rgba(255,193,7,0.2); border: 1px solid #ffc107;
+      border-radius: 10px; padding: 15px;
+      color: #ffc107; font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -315,7 +320,17 @@
         </div>
         <div class="result-box">
           <h3>サムネイル（カバー画像）</h3>
-          <img id="thumbnailPreview" class="thumbnail-preview" src="" alt="サムネイル">
+          <div id="thumbnailSection">
+            <img id="thumbnailPreview" class="thumbnail-preview" src="" alt="サムネイル" style="display: none;">
+            <div id="thumbnailError" class="thumbnail-error" style="display: none;">
+              画像の自動生成に失敗しました（API課金が必要）。下記に画像URLを入力するか、空欄のまま公開できます。
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+              <label for="manualThumbnailUrl">画像URL（手動入力）</label>
+              <input type="text" id="manualThumbnailUrl" placeholder="https://example.com/image.jpg">
+              <p class="help-text">imgbbやGyazoなどにアップロードした画像のURLを入力</p>
+            </div>
+          </div>
         </div>
         <div class="result-box">
           <h3>X投稿文</h3>
@@ -502,7 +517,17 @@
               xPost: data.xPost
             };
 
-            document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
+            // サムネイル表示
+            if (data.thumbnailUrl) {
+              document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
+              document.getElementById('thumbnailPreview').style.display = 'block';
+              document.getElementById('thumbnailError').style.display = 'none';
+              document.getElementById('manualThumbnailUrl').value = data.thumbnailUrl;
+            } else {
+              document.getElementById('thumbnailPreview').style.display = 'none';
+              document.getElementById('thumbnailError').style.display = 'block';
+              document.getElementById('manualThumbnailUrl').value = '';
+            }
             document.getElementById('xPostContent').textContent = data.xPost;
 
             const metadata = data.metadata || {};
@@ -555,7 +580,17 @@
           metadata: data.metadata, thumbnailUrl: data.thumbnailUrl, xPost: data.xPost
         };
 
-        document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
+        // サムネイル表示
+        if (data.thumbnailUrl) {
+          document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
+          document.getElementById('thumbnailPreview').style.display = 'block';
+          document.getElementById('thumbnailError').style.display = 'none';
+          document.getElementById('manualThumbnailUrl').value = data.thumbnailUrl;
+        } else {
+          document.getElementById('thumbnailPreview').style.display = 'none';
+          document.getElementById('thumbnailError').style.display = 'block';
+          document.getElementById('manualThumbnailUrl').value = '';
+        }
         document.getElementById('xPostContent').textContent = data.xPost;
 
         const metadata = data.metadata || {};
@@ -593,6 +628,12 @@
     // Step 2: 公開
     document.getElementById('btnPublish').addEventListener('click', async () => {
       if (!previewData) { alert('プレビューデータがありません'); return; }
+
+      // 手動入力のサムネイルURLを使用
+      const manualUrl = document.getElementById('manualThumbnailUrl').value.trim();
+      if (manualUrl) {
+        previewData.thumbnailUrl = manualUrl;
+      }
 
       const btn = document.getElementById('btnPublish');
       btn.disabled = true;
