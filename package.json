@@ -10,6 +10,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
+    "server": "ts-node src/server.ts",
+    "server:prod": "node dist/server.js",
     "draft": "ts-node src/index.ts draft",
     "publish": "ts-node src/index.ts publish",
     "auto": "ts-node src/index.ts auto"
@@ -29,10 +31,12 @@
     "@notionhq/client": "^2.2.15",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
+    "express": "^4.21.2",
     "form-data": "^4.0.1",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"

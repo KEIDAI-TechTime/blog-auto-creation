@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TechTime Blog Automation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #00d4aa, #00a8cc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 1.1rem;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 20px;
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-dot.ok { background: #00d4aa; }
+    .status-dot.ng { background: #ff4757; }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .card h2 {
+      font-size: 1.3rem;
+      margin-bottom: 20px;
+      color: #00d4aa;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 18px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #00d4aa;
+    }
+
+    input[type="text"]::placeholder {
+      color: #666;
+    }
+
+    .btn {
+      padding: 14px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #00d4aa, #00a8cc);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0,212,170,0.3);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      margin-left: 10px;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .result-area {
+      margin-top: 30px;
+      display: none;
+    }
+
+    .result-area.show {
+      display: block;
+    }
+
+    .result-box {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 15px;
+    }
+
+    .result-box h3 {
+      font-size: 1rem;
+      color: #00d4aa;
+      margin-bottom: 10px;
+    }
+
+    .result-content {
+      white-space: pre-wrap;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      max-height: 400px;
+      overflow-y: auto;
+      color: #ddd;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #00d4aa;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: #888;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .tab.active {
+      background: rgba(0,212,170,0.2);
+      border-color: #00d4aa;
+      color: #00d4aa;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .x-post-box {
+      background: #000;
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 15px;
+    }
+
+    .x-post-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .x-avatar {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(90deg, #00d4aa, #00a8cc);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    .x-name {
+      font-weight: bold;
+    }
+
+    .x-handle {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    .copy-btn {
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      margin-top: 15px;
+    }
+
+    .success-message {
+      background: rgba(0,212,170,0.2);
+      border: 1px solid #00d4aa;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    .thumbnail-preview {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 15px;
+    }
+
+    a {
+      color: #00d4aa;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>TechTime Blog Automation</h1>
+      <p class="subtitle">AI-Powered Blog Creation Tool</p>
+    </header>
+
+    <div class="status-bar" id="statusBar">
+      <div class="status-item">
+        <span class="status-dot" id="statusClaude"></span>
+        <span>Claude API</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot" id="statusNotion"></span>
+        <span>Notion API</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot" id="statusGemini"></span>
+        <span>Gemini API</span>
+      </div>
+      <div class="status-item">
+        <span class="status-dot" id="statusImgbb"></span>
+        <span>imgbb API</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="draft">1. 下書き生成</div>
+      <div class="tab" data-tab="publish">2. 公開</div>
+    </div>
+
+    <!-- 下書き生成タブ -->
+    <div class="tab-content active" id="tab-draft">
+      <div class="card">
+        <h2>記事の下書きを生成</h2>
+        <div class="form-group">
+          <label for="draftTitle">記事タイトル</label>
+          <input type="text" id="draftTitle" placeholder="例: SES業界の闇と解決策">
+        </div>
+        <button class="btn btn-primary" id="btnDraft">下書きを生成</button>
+      </div>
+
+      <div class="loading" id="loadingDraft">
+        <div class="spinner"></div>
+        <p class="loading-text">記事を生成中です...<br>Webリサーチと執筆には数分かかります</p>
+      </div>
+
+      <div class="result-area" id="resultDraft">
+        <div class="card">
+          <h2>生成結果</h2>
+          <div class="result-box">
+            <h3>記事本文</h3>
+            <div class="result-content" id="articleContent"></div>
+          </div>
+          <div class="result-box">
+            <h3>保存先</h3>
+            <div class="result-content" id="outputPath"></div>
+          </div>
+          <button class="btn btn-secondary copy-btn" onclick="copyArticle()">記事をコピー</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 公開タブ -->
+    <div class="tab-content" id="tab-publish">
+      <div class="card">
+        <h2>Notionに公開</h2>
+        <div class="form-group">
+          <label for="publishTitle">記事タイトル</label>
+          <input type="text" id="publishTitle" placeholder="例: SES業界の闇と解決策">
+        </div>
+        <div class="form-group">
+          <label for="notionUrl">NotionページURL</label>
+          <input type="text" id="notionUrl" placeholder="https://notion.so/...">
+        </div>
+        <div class="form-group">
+          <label for="draftFile">下書きファイルパス</label>
+          <input type="text" id="draftFile" placeholder="./drafts/2024-01-01-article.md">
+        </div>
+        <button class="btn btn-primary" id="btnPublish">公開する</button>
+      </div>
+
+      <div class="loading" id="loadingPublish">
+        <div class="spinner"></div>
+        <p class="loading-text">公開処理中です...<br>サムネイル生成・Notion保存を実行中</p>
+      </div>
+
+      <div class="result-area" id="resultPublish">
+        <div class="card">
+          <h2>公開完了</h2>
+
+          <div class="success-message show">
+            Notionへの保存が完了しました
+          </div>
+
+          <div class="result-box">
+            <h3>Notion URL</h3>
+            <div class="result-content"><a id="resultNotionUrl" href="#" target="_blank"></a></div>
+          </div>
+
+          <div class="result-box">
+            <h3>サムネイル</h3>
+            <img id="thumbnailPreview" class="thumbnail-preview" src="" alt="サムネイル">
+          </div>
+
+          <div class="result-box">
+            <h3>X投稿文</h3>
+            <div class="x-post-box">
+              <div class="x-post-header">
+                <div class="x-avatar">T</div>
+                <div>
+                  <div class="x-name">TechTime</div>
+                  <div class="x-handle">@techtime_jp</div>
+                </div>
+              </div>
+              <div class="result-content" id="xPostContent"></div>
+            </div>
+            <button class="btn btn-secondary copy-btn" onclick="copyXPost()">投稿文をコピー</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // タブ切り替え
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    // ステータス確認
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        document.getElementById('statusClaude').className = `status-dot ${data.env.claude ? 'ok' : 'ng'}`;
+        document.getElementById('statusNotion').className = `status-dot ${data.env.notion ? 'ok' : 'ng'}`;
+        document.getElementById('statusGemini').className = `status-dot ${data.env.gemini ? 'ok' : 'ng'}`;
+        document.getElementById('statusImgbb').className = `status-dot ${data.env.imgbb ? 'ok' : 'ng'}`;
+      } catch (e) {
+        console.error('Status check failed:', e);
+      }
+    }
+    checkStatus();
+
+    // 下書き生成
+    document.getElementById('btnDraft').addEventListener('click', async () => {
+      const title = document.getElementById('draftTitle').value.trim();
+      if (!title) {
+        alert('タイトルを入力してください');
+        return;
+      }
+
+      const btn = document.getElementById('btnDraft');
+      const loading = document.getElementById('loadingDraft');
+      const result = document.getElementById('resultDraft');
+
+      btn.disabled = true;
+      loading.classList.add('show');
+      result.classList.remove('show');
+
+      try {
+        const res = await fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        document.getElementById('articleContent').textContent = data.articleContent;
+        document.getElementById('outputPath').textContent = data.outputPath || '(未保存)';
+
+        // 公開タブに自動入力
+        document.getElementById('publishTitle').value = title;
+        document.getElementById('draftFile').value = data.outputPath || '';
+
+        result.classList.add('show');
+      } catch (e) {
+        alert('エラー: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    });
+
+    // 公開
+    document.getElementById('btnPublish').addEventListener('click', async () => {
+      const title = document.getElementById('publishTitle').value.trim();
+      const notionUrl = document.getElementById('notionUrl').value.trim();
+      const draftFile = document.getElementById('draftFile').value.trim();
+
+      if (!title || !notionUrl || !draftFile) {
+        alert('全ての項目を入力してください');
+        return;
+      }
+
+      const btn = document.getElementById('btnPublish');
+      const loading = document.getElementById('loadingPublish');
+      const result = document.getElementById('resultPublish');
+
+      btn.disabled = true;
+      loading.classList.add('show');
+      result.classList.remove('show');
+
+      try {
+        const res = await fetch('/api/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, notionUrl, draftFile })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        document.getElementById('resultNotionUrl').href = data.notionUrl;
+        document.getElementById('resultNotionUrl').textContent = data.notionUrl;
+        document.getElementById('thumbnailPreview').src = data.thumbnailUrl;
+        document.getElementById('xPostContent').textContent = data.xPost;
+
+        result.classList.add('show');
+      } catch (e) {
+        alert('エラー: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    });
+
+    // コピー機能
+    function copyArticle() {
+      const text = document.getElementById('articleContent').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('記事をコピーしました');
+      });
+    }
+
+    function copyXPost() {
+      const text = document.getElementById('xPostContent').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('投稿文をコピーしました');
+      });
+    }
+  </script>
+</body>
+</html>
