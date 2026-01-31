@@ -190,69 +190,71 @@ JSONのみを出力してください。`
       backgroundTheme: 'modern office workspace'
     };
 
-    // Step 4: Gemini で画像生成
-    console.log('Step 4: Gemini で画像生成');
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    // 画像生成には gemini-3-pro-image-preview を使用
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-image-preview' });
+    // Step 4: Imagen 3 で画像生成
+    console.log('Step 4: Imagen 3 で画像生成');
+    let thumbnailUrl = '';
+    let imageGenerationError = '';
 
-    const titleLines = thumbnailInfo.mainTitle.split('\n');
-    const thumbnailPrompt = `A wide horizontal image (1280x720 aspect ratio) for a blog thumbnail. The background shows ${thumbnailInfo.backgroundTheme}, with a strong blue color grading, heavy blur/depth of field effect, and dim atmospheric lighting with scattered light source highlights. In the center of the image, place a dark charcoal semi-transparent rectangular box, tilted at approximately 5 degrees to the left, with a thin green border line around it. Inside the box, display white bold Japanese text in two lines at the top reading "${titleLines[0] || ''}" on the first line and "${titleLines[1] || ''}" on the second line. At the bottom of the box, display smaller white thin Japanese text reading "${thumbnailInfo.subTitle}". Professional, modern blog thumbnail style.`;
+    try {
+      const titleLines = thumbnailInfo.mainTitle.split('\n');
+      const thumbnailPrompt = `A wide horizontal image (1280x720 aspect ratio) for a blog thumbnail. The background shows ${thumbnailInfo.backgroundTheme}, with a strong blue color grading, heavy blur/depth of field effect, and dim atmospheric lighting with scattered light source highlights. In the center of the image, place a dark charcoal semi-transparent rectangular box, tilted at approximately 5 degrees to the left, with a thin green border line around it. Inside the box, display white bold Japanese text in two lines at the top reading "${titleLines[0] || ''}" on the first line and "${titleLines[1] || ''}" on the second line. At the bottom of the box, display smaller white thin Japanese text reading "${thumbnailInfo.subTitle}". Professional, modern blog thumbnail style.`;
 
-    console.log('Generating image with prompt:', thumbnailPrompt.slice(0, 100) + '...');
+      // Imagen 3 API を直接呼び出し
+      const imagenResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instances: [{ prompt: thumbnailPrompt }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: '16:9',
+            },
+          }),
+        }
+      );
 
-    const imageResult = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: thumbnailPrompt }] }],
-      generationConfig: { responseModalities: ['image', 'text'] } as any,
-    });
+      const imagenResult = await imagenResponse.json() as any;
+      console.log('Imagen response status:', imagenResponse.status);
 
-    console.log('Gemini response received, extracting image...');
+      if (imagenResult.predictions && imagenResult.predictions.length > 0) {
+        const imageBase64 = imagenResult.predictions[0].bytesBase64Encoded;
+        if (imageBase64) {
+          // Step 5: imgbb にアップロード
+          console.log('Step 5: imgbb にアップロード');
+          const formData = new URLSearchParams();
+          formData.append('key', process.env.IMGBB_API_KEY!);
+          formData.append('image', imageBase64);
+          formData.append('name', `techtime-${metadata.slug || 'thumbnail'}`);
 
-    let imageData: Buffer | null = null;
-    const candidates = imageResult.response.candidates;
-    console.log('Candidates count:', candidates?.length || 0);
+          const imgbbResponse = await fetch('https://api.imgbb.com/1/upload', {
+            method: 'POST',
+            body: formData,
+          });
 
-    if (candidates && candidates.length > 0) {
-      for (const candidate of candidates) {
-        if (candidate.content && candidate.content.parts) {
-          console.log('Parts count:', candidate.content.parts.length);
-          for (const part of candidate.content.parts) {
-            console.log('Part type:', Object.keys(part));
-            if ('inlineData' in part && part.inlineData) {
-              console.log('Found inlineData, mimeType:', part.inlineData.mimeType);
-              imageData = Buffer.from(part.inlineData.data, 'base64');
-              break;
-            }
+          const imgbbResult = await imgbbResponse.json() as { success: boolean; data: { url: string }; error?: { message: string } };
+
+          if (imgbbResult.success) {
+            thumbnailUrl = imgbbResult.data.url;
+            console.log('imgbb upload success:', thumbnailUrl);
+          } else {
+            console.error('imgbb upload failed:', imgbbResult.error?.message);
+            imageGenerationError = 'imgbbアップロード失敗';
           }
         }
+      } else if (imagenResult.error) {
+        console.error('Imagen error:', imagenResult.error.message);
+        imageGenerationError = imagenResult.error.message;
       }
+    } catch (imgError) {
+      console.error('Image generation error:', imgError);
+      imageGenerationError = imgError instanceof Error ? imgError.message : '画像生成エラー';
     }
 
-    let thumbnailUrl = '';
-    if (imageData) {
-      // Step 5: imgbb にアップロード
-      console.log('Step 5: imgbb にアップロード, image size:', imageData.length, 'bytes');
-      const formData = new URLSearchParams();
-      formData.append('key', process.env.IMGBB_API_KEY!);
-      formData.append('image', imageData.toString('base64'));
-      formData.append('name', `techtime-${metadata.slug || 'thumbnail'}`);
-
-      const imgbbResponse = await fetch('https://api.imgbb.com/1/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const imgbbResult = await imgbbResponse.json() as { success: boolean; data: { url: string }; error?: { message: string } };
-      console.log('imgbb response:', JSON.stringify(imgbbResult).slice(0, 200));
-
-      if (imgbbResult.success) {
-        thumbnailUrl = imgbbResult.data.url;
-        console.log('imgbb upload success:', thumbnailUrl);
-      } else {
-        console.error('imgbb upload failed:', imgbbResult.error?.message || 'Unknown error');
-      }
-    } else {
-      console.warn('No image data generated from Gemini');
+    // 画像生成失敗時もプレビューは続行（サムネイルなし）
+    if (!thumbnailUrl && imageGenerationError) {
+      console.warn('画像生成をスキップ:', imageGenerationError);
     }
 
     // Step 6: X 投稿文生成
@@ -292,6 +294,7 @@ X投稿文のみを出力してください（140文字以内）。`
       metadata,
       thumbnailUrl,
       xPost: xPost.trim(),
+      imageGenerationError: imageGenerationError || undefined,
     });
   } catch (error) {
     console.error('Preview error:', error);
