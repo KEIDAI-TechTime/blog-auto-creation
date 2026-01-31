@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       max_tokens: 8192,
       tools: [
         {
-          type: 'web_search',
+          type: 'web_search_20250305',
           name: 'web_search',
         } as any,
       ],
